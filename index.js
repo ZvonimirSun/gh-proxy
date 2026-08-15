@@ -92,6 +92,14 @@ async function fetchHandler(req, config) {
     if (path) {
         return Response.redirect('https://' + urlObj.host + config.prefix + path, 301)
     }
+    // Git 会基于 clone URL 自动请求这些 Smart HTTP 端点。只转换明确的 Git
+    // 端点，避免将 static/app.css 之类的普通两段资源路径误判为 GitHub 仓库。
+    const shortPath = urlObj.pathname.substr(config.prefix.length)
+    const shortMatch = shortPath.match(/^([^/]+)\/([^/]+)\/(?:info\/refs|git-upload-pack|git-receive-pack)$/)
+    if (shortMatch) {
+        path = 'https://github.com/' + shortPath + urlObj.search
+        return httpHandler(req, path, config)
+    }
     // cfworker 会把路径中的 `//` 合并成 `/`
     path = urlObj.href.substr(urlObj.origin.length + config.prefix.length).replace(/^https?:\/+/, 'https://')
     if (path.search(exp1) === 0 || path.search(exp5) === 0 || path.search(exp6) === 0 || path.search(exp3) === 0 || path.search(exp4) === 0) {
