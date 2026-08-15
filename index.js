@@ -5,7 +5,7 @@
  */
 const ASSET_URL = 'https://zvonimirsun.github.io/gh-proxy/'
 // 前缀，如果自定义路由为example.com/gh/*，将PREFIX改为 '/gh/'，注意，少一个杠都会错！
-const PREFIX = '/'
+const PREFIX = '/gh/'
 // 分支文件使用jsDelivr镜像的开关，0为关闭，默认关闭
 const Config = {
     jsdelivr: 0
