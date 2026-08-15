@@ -120,6 +120,24 @@ async function fetchHandler(req, config) {
 }
 
 
+function checkWhiteList(urlStr, whiteList) {
+    if (!whiteList.length) return true
+
+    const repoMatch = urlStr.match(/^(?:https?:\/\/)?(?:github\.com|raw\.(?:githubusercontent|github)\.com)\/([^/]+)\/([^/]+)/i)
+        || urlStr.match(/^(?:https?:\/\/)?gist\.(?:githubusercontent|github)\.com\/([^/]+)/i)
+    return whiteList.some(rule => {
+        // Slash-wrapped entries retain the Worker's original URL substring matching.
+        if (rule.startsWith('/') || rule.endsWith('/')) return urlStr.includes(rule)
+        if (!repoMatch) return false
+
+        const parts = rule.split('/').map(item => item.trim()).filter(Boolean)
+        if (parts.length === 1) return repoMatch[1] === parts[0]
+        if (parts.length !== 2) return false
+        return (parts[0] === '*' || repoMatch[1] === parts[0]) && repoMatch[2] === parts[1]
+    })
+}
+
+
 /**
  * @param {Request} req
  * @param {string} pathname
@@ -138,14 +156,7 @@ function httpHandler(req, pathname, config) {
     const reqHdrNew = new Headers(reqHdrRaw)
 
     let urlStr = pathname
-    let flag = !Boolean(config.whiteList.length)
-    for (let i of config.whiteList) {
-        if (urlStr.includes(i)) {
-            flag = true
-            break
-        }
-    }
-    if (!flag) {
+    if (!checkWhiteList(urlStr, config.whiteList)) {
         return new Response("blocked", {status: 403})
     }
     if (urlStr.search(/^https?:\/\//) !== 0) {

@@ -116,6 +116,38 @@ def check_url(u):
     return False
 
 
+def check_white_list(u):
+    if not white_list:
+        return True
+
+    repo_match = re.match(
+        r'^(?:https?://)?(?:github\.com|raw\.(?:githubusercontent|github)\.com)/([^/]+)/([^/]+)',
+        u,
+        re.I) or re.match(
+            r'^(?:https?://)?gist\.(?:githubusercontent|github)\.com/([^/]+)',
+            u,
+            re.I)
+    for rule in white_list:
+        # 保留 Worker 原有的 /user/ URL 包含匹配，同时兼容 Python 版仓库规则。
+        if rule.startswith('/') or rule.endswith('/'):
+            if rule in u:
+                return True
+            continue
+        if not repo_match:
+            continue
+
+        parts = tuple(item.strip() for item in rule.split('/') if item.strip())
+        repo_parts = repo_match.groups()
+        if len(parts) == 1 and repo_parts[0] == parts[0]:
+            return True
+        if (len(parts) == 2 and
+                len(repo_parts) == 2 and
+                (parts[0] == '*' or repo_parts[0] == parts[0]) and
+                repo_parts[1] == parts[1]):
+            return True
+    return False
+
+
 @app.route(PREFIX + '<path:u>', methods=['GET', 'POST'])
 def handler(u):
     # shorthand 和完整地址复用同一组正则，避免两套代理路径逐渐产生差异。
@@ -128,7 +160,7 @@ def handler(u):
     m = check_url(u)
     if m:
         m = tuple(m.groups())
-        if white_list and not any(item in u for item in white_list):
+        if not check_white_list(u):
             return Response('Forbidden by white list.', status=403)
         for i in black_list:
             if m[:len(i)] == i or i[0] == '*' and len(m) == 2 and m[1] == i[1]:
