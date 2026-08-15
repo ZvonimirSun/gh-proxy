@@ -49,6 +49,7 @@ exp2 = re.compile(r'^(?:https?://)?github\.com/(?P<author>.+?)/(?P<repo>.+?)/(?:
 exp3 = re.compile(r'^(?:https?://)?github\.com/(?P<author>.+?)/(?P<repo>.+?)/(?:info|git-).*$')
 exp4 = re.compile(r'^(?:https?://)?raw\.(?:githubusercontent|github)\.com/(?P<author>.+?)/(?P<repo>.+?)/.+?/.+$')
 exp5 = re.compile(r'^(?:https?://)?gist\.(?:githubusercontent|github)\.com/(?P<author>.+?)/.+?/.+$')
+exp6 = re.compile(r'^(?:https?://)?github\.com/(?P<author>.+?)/(?P<repo>.+?)/tags.*$')
 
 requests.sessions.default_headers = lambda: CaseInsensitiveDict()
 
@@ -108,7 +109,7 @@ def iter_content(self, chunk_size=1, decode_unicode=False):
 
 
 def check_url(u):
-    for exp in (exp1, exp2, exp3, exp4, exp5):
+    for exp in (exp1, exp2, exp3, exp4, exp5, exp6):
         m = exp.match(u)
         if m:
             return m
@@ -117,7 +118,10 @@ def check_url(u):
 
 @app.route(PREFIX + '<path:u>', methods=['GET', 'POST'])
 def handler(u):
-    u = u if u.startswith('http') else 'https://' + u
+    # shorthand 和完整地址复用同一组正则，避免两套代理路径逐渐产生差异。
+    has_github_host = re.match(r'^(?:github\.com|raw\.(?:githubusercontent|github)\.com|gist\.(?:githubusercontent|github)\.com)/', u, re.I)
+    short_url = None if u.startswith('http') or has_github_host else 'https://github.com/' + u
+    u = short_url if short_url and check_url(short_url) else (u if u.startswith('http') else 'https://' + u)
     if u.rfind('://', 3, 9) == -1:
         u = u.replace('s:/', 's://', 1)  # uwsgi会将//传递为/
     pass_by = False
