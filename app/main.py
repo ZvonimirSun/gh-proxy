@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+import os
 import re
 
 import requests
@@ -14,19 +15,21 @@ from urllib.parse import quote
 
 # config
 # 分支文件使用jsDelivr镜像的开关，0为关闭，默认关闭
-jsdelivr = 0
+ASSET_URL = os.getenv('GH_PROXY_ASSET_URL', 'https://zvonimirsun.github.io/gh-proxy/')
+PREFIX = os.getenv('GH_PROXY_PREFIX', '/')
+jsdelivr = os.getenv('GH_PROXY_JSDELIVR', '0') == '1'
+# 逗号分隔的 URL 包含匹配，e.g. /user1/,/user2/
+white_list = [item.strip() for item in os.getenv('GH_PROXY_WHITELIST', '').split(',') if item.strip()]
 size_limit = 1024 * 1024 * 1024 * 999  # 允许的文件大小，默认999GB，相当于无限制了 https://github.com/hunshcn/gh-proxy/issues/8
 
 """
-  先生效白名单再匹配黑名单，pass_list匹配到的会直接302到jsdelivr而忽略设置
+  先匹配 GH_PROXY_WHITELIST，再匹配黑名单，pass_list匹配到的会直接302到jsdelivr而忽略设置
   生效顺序 白->黑->pass，可以前往https://github.com/hunshcn/gh-proxy/issues/41 查看示例
-  每个规则一行，可以封禁某个用户的所有仓库，也可以封禁某个用户的特定仓库，下方用黑名单示例，白名单同理
+  black_list和pass_list每个规则一行，可以匹配某个用户的所有仓库或特定仓库
   user1 # 封禁user1的所有仓库
   user1/repo1 # 封禁user1的repo1
   */repo1 # 封禁所有叫做repo1的仓库
 """
-white_list = '''
-'''
 black_list = '''
 '''
 pass_list = '''
@@ -34,15 +37,13 @@ pass_list = '''
 
 HOST = '127.0.0.1'  # 监听地址，建议监听本地然后由web服务器反代
 PORT = 80  # 监听端口
-ASSET_URL = 'https://hunshcn.github.io/gh-proxy'  # 主页
 
-white_list = [tuple([x.replace(' ', '') for x in i.split('/')]) for i in white_list.split('\n') if i]
 black_list = [tuple([x.replace(' ', '') for x in i.split('/')]) for i in black_list.split('\n') if i]
 pass_list = [tuple([x.replace(' ', '') for x in i.split('/')]) for i in pass_list.split('\n') if i]
 app = Flask(__name__)
 CHUNK_SIZE = 1024 * 10
 index_html = requests.get(ASSET_URL, timeout=10).text
-icon_r = requests.get(ASSET_URL + '/favicon.ico', timeout=10).content
+icon_r = requests.get(ASSET_URL + 'favicon.ico', timeout=10).content
 exp1 = re.compile(r'^(?:https?://)?github\.com/(?P<author>.+?)/(?P<repo>.+?)/(?:releases|archive)/.*$')
 exp2 = re.compile(r'^(?:https?://)?github\.com/(?P<author>.+?)/(?P<repo>.+?)/(?:blob|raw)/.*$')
 exp3 = re.compile(r'^(?:https?://)?github\.com/(?P<author>.+?)/(?P<repo>.+?)/(?:info|git-).*$')
@@ -52,14 +53,14 @@ exp5 = re.compile(r'^(?:https?://)?gist\.(?:githubusercontent|github)\.com/(?P<a
 requests.sessions.default_headers = lambda: CaseInsensitiveDict()
 
 
-@app.route('/')
+@app.route(PREFIX)
 def index():
     if 'q' in request.args:
-        return redirect('/' + request.args.get('q'))
+        return redirect(PREFIX + request.args.get('q'))
     return index_html
 
 
-@app.route('/favicon.ico')
+@app.route(PREFIX + 'favicon.ico')
 def icon():
     return Response(icon_r, content_type='image/vnd.microsoft.icon')
 
@@ -114,7 +115,7 @@ def check_url(u):
     return False
 
 
-@app.route('/<path:u>', methods=['GET', 'POST'])
+@app.route(PREFIX + '<path:u>', methods=['GET', 'POST'])
 def handler(u):
     u = u if u.startswith('http') else 'https://' + u
     if u.rfind('://', 3, 9) == -1:
@@ -123,12 +124,8 @@ def handler(u):
     m = check_url(u)
     if m:
         m = tuple(m.groups())
-        if white_list:
-            for i in white_list:
-                if m[:len(i)] == i or i[0] == '*' and len(m) == 2 and m[1] == i[1]:
-                    break
-            else:
-                return Response('Forbidden by white list.', status=403)
+        if white_list and not any(item in u for item in white_list):
+            return Response('Forbidden by white list.', status=403)
         for i in black_list:
             if m[:len(i)] == i or i[0] == '*' and len(m) == 2 and m[1] == i[1]:
                 return Response('Forbidden by black list.', status=403)
@@ -181,7 +178,7 @@ def proxy(u, allow_redirects=False):
         if 'Location' in r.headers:
             _location = r.headers.get('Location')
             if check_url(_location):
-                headers['Location'] = '/' + _location
+                headers['Location'] = PREFIX + _location
             else:
                 return proxy(_location, True)
 

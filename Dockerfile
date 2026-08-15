@@ -9,6 +9,10 @@ WORKDIR /app
 
 # Make /app/* available to be imported by Python globally to better support several use cases like Alembic migrations.
 ENV PYTHONPATH=/app
+ENV GH_PROXY_ASSET_URL=https://zvonimirsun.github.io/gh-proxy/ \
+    GH_PROXY_PREFIX=/ \
+    GH_PROXY_JSDELIVR=0 \
+    GH_PROXY_WHITELIST=""
 
 # Move the base entrypoint to reuse it
 RUN mv /entrypoint.sh /uwsgi-nginx-entrypoint.sh
